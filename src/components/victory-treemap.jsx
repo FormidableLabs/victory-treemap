@@ -13,7 +13,14 @@ class VictoryTreemap extends React.Component {
   }
   drawCells (cells) {
     var cellComponents = cells.map((cell, index) => {
-      return (this.props.cellSVG(cell, index, this.handleCellClick.bind(this, cell)));
+      return (
+        this.props.cellSVG(
+          cell,
+          index,
+          this.handleCellClick.bind(this, cell),
+          this.props.colorScale
+        )
+      );
     });
     return cellComponents;
   }
@@ -33,7 +40,7 @@ class VictoryTreemap extends React.Component {
     /* move into function, don't recreate this in render */
     let cells = treemap.nodes(this.props.data);
     return (
-      <g transform={this.props.transform}>
+      <g>
         {this.drawCells(cells)}
       </g>
     );
@@ -48,9 +55,9 @@ VictoryTreemap.defaultProps = {
   colorScale: d3.scale.category20c(),
   width: 2000,
   height: 2000,
-  transform: "1px",
   sticky: true,
-  cellSVG: (cell, index, clickHandler) => {
+  cellSVG: (cell, index, clickHandler, colorScale) => {
+    console.log(cell)
     return (
       <g
         transform={"translate(" + cell.x + "," + cell.y + ")"}
@@ -61,7 +68,7 @@ VictoryTreemap.defaultProps = {
           width={cell.dx}
           height={cell.dy}
           style={{
-            "fill": cell.hasChildren ? color(cell.name) : "none",
+            "fill": cell.children ? colorScale(cell.name) : "none",
             "stroke": "white",
             "strokeWidth": "1.5px"
           }}/>
@@ -84,6 +91,15 @@ VictoryTreemap.defaultProps = {
 export default VictoryTreemap;
 
 /*
+
+<Cell
+  key={index}
+  hasChildren={cell.children ? true : false}
+  name={cell.name}
+  x={cell.x}
+  y={cell.y}
+  dx={cell.dx}
+  dy={cell.dy}/>
 
   constructor(props) {
     super(props);
