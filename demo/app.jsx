@@ -7,9 +7,7 @@ class App extends React.Component {
   render() {
     return (
       <div className="demo">
-        <svg width="2000" height="2000">
-          <VictoryTreemap data={flare}/>
-        </svg>
+        <VictoryTreemap data={flare}/>
       </div>
     );
   }
