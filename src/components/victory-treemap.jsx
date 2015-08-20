@@ -95,12 +95,15 @@ class VictoryTreemap extends React.Component {
         });
       }
     }
+    console.log("original",this.props.data)
 
     /* make a copy of data so that we're not mutating props */
     let data = _.cloneDeep(this.props.data);
+    console.log("clone",data)
     this.addSpecialPropertiesToZoomableTree(data)
     this.aggregateChildrenAndAddValueToParents(data);
     computeTreemapAndAdjustPerspective(data, treemap);
+    console.log("after mutate",data)
 
     /*
       todo how is _children being used -
@@ -152,6 +155,7 @@ class VictoryTreemap extends React.Component {
           }
           >
         {
+
           this.props.drawZoomableParentCells(
             data,
             this.props.drawZoomableChildrenCells,
@@ -255,10 +259,11 @@ VictoryTreemap.defaultProps = {
     childrenRect: {
       fill: "rgb(230,230,230)",
       strokeWidth: "1px",
+      stroke: "white",
       fillOpacity: .5
     },
     parentRect: {
-      fill: "rgb(230,230,230)",
+      fill: "rgb(195, 43, 43)",
       strokeWidth: "2px",
       fillOpacity: .5
     }
@@ -315,6 +320,7 @@ VictoryTreemap.defaultProps = {
   /* this is the first for loop that appends the first level past the root node */
   drawZoomableParentCells: (data, drawZoomableChildrenCells, x, y, formatNumber, styles) => {
     let parents = data._children.map((parent) => {
+      // console.log(parent)
       return (
         <g>
           <rect
