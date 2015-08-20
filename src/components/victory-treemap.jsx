@@ -1,6 +1,7 @@
 import React from "react";
 import Radium from "radium";
 import d3 from "d3";
+import lodash from "lodash";
 
 /* when they are modularized */
 // import colorScale from "d3-color-scale";
@@ -13,7 +14,7 @@ class VictoryTreemap extends React.Component {
   }
   /* ========== STATIC CELLS ========== */
   drawStaticCells (cells) {
-    var cellComponents = cells.map((cell, index) => {
+    let cellComponents = cells.map((cell, index) => {
       return (
         this.props.cellSVG(
           cell,
@@ -25,6 +26,7 @@ class VictoryTreemap extends React.Component {
     });
     return cellComponents;
   }
+
   /* ========== STATIC MAIN ========== */
   drawStatic () {
     let treemap = d3.layout
@@ -37,32 +39,22 @@ class VictoryTreemap extends React.Component {
                     .value(function(d) {
                       return d.size;
                     });
-    /* note that for the zoomable version, the equiv func is 'layout' */
+
     let cells = treemap.nodes(this.props.data);
     return this.drawStaticCells(cells)
   }
-  /* ========== ZOOMABLE CELLS ========== */
-
-  drawZoomableCells (cells) {
-    /* looks like maybe this will be cells._children.map() for zoomable */
-    var cellComponents = cells._children.map((cell, index) => {
-      return (
-        this.props.cellSVG(
-          cell,
-          index,
-          this.handleCellClick.bind(this, cell),
-          this.props.colorScale
-        )
-      );
-    });
-    return cellComponents;
+  /*
+    this gives you a breadcrumb on the grandparent (nice!)
+    each part could be a link
+  */
+  getGrandparentText (d) {
+    return d.parent ? getName(d.parent) + " > " + d.name : d.name;
   }
-
   /* ========== ZOOMABLE MAIN ========== */
   drawZoomable () {
 
     let width = this.props.width;
-    let height = 500 - this.props.grandparentHeight - this.props.margin.bottom;
+    let height = 500 - this.props.grandparentHeight - this.props.styles.svg.margin.bottom;
     let formatNumber = d3.format(",d");
     let transitioning;
 
@@ -74,19 +66,15 @@ class VictoryTreemap extends React.Component {
         .domain([0, height])
         .range([0, height]);
 
-    /* this gives you a breadcrumb on the grandparent (nice!) each could be a link*/
-    function getGrandparentText (d) {
-      return d.parent ? getName(d.parent) + " > " + d.name : d.name;
-    }
 
     /* ========== SET UP THE TREEMAP FUNCTION ========== */
-
     let treemap = d3.layout.treemap()
         .children(function(d, depth) { return depth ? null : d._children; })
         .sort(function(a, b) { return a.value - b.value; })
         .ratio(height / width * 0.5 * (1 + Math.sqrt(5)))
         .round(false);
 
+    // Children will get stretched...
     // Compute the treemap layout recursively such that each group of siblings
     // uses the same size (1×1) rather than the dimensions of the parent cell.
     // This optimizes the layout for the current zoom state. Note that a wrapper
@@ -94,57 +82,90 @@ class VictoryTreemap extends React.Component {
     // the parent’s dimensions are not discarded as we recurse. Since each group
     // of sibling was laid out in 1×1, we must rescale to fit using absolute
     // coordinates. This lets us use a viewport to zoom.
-    function createZoomableCells (d) {
-      if (d._children) {
-        treemap.nodes({_children: d._children});
-        d._children.forEach(function(c) {
-          c.x = d.x + c.x * d.dx;
-          c.y = d.y + c.y * d.dy;
-          c.dx *= d.dx;
-          c.dy *= d.dy;
-          c.parent = d;
-          createZoomableCells(c);
+    function computeTreemapAndAdjustPerspective (parent) {
+      if (parent._children) {
+        treemap.nodes({_children: parent._children});
+        parent._children.forEach((child) => {
+          child.x = parent.x + child.x * parent.dx;
+          child.y = parent.y + child.y * parent.dy;
+          child.dx *= parent.dx;
+          child.dy *= parent.dy;
+          child.parent = parent;
+          computeTreemapAndAdjustPerspective(child);
         });
       }
     }
 
-    let data = this.props.data;
-
+    /* make a copy of data so that we're not mutating props */
+    let data = _.cloneDeep(this.props.data);
     this.addSpecialPropertiesToZoomableTree(data)
     this.aggregateChildrenAndAddValueToParents(data);
-    createZoomableCells(data);
-    let cells = this.drawZoomableCells(data);
+    computeTreemapAndAdjustPerspective(data, treemap);
 
     /*
       todo how is _children being used -
       where do i need to reference that...
-      when createZoomableCells or drawCells or both
+      when computeTreemapAndAdjustPerspective or drawCells or both
 
       also... how does datum(d.parent) work
       that call out to the name() function above
 
     */
+    /*
+      grandparent bar is across the top - TODO check if this aligned with orig ex.
+      grandparent container is full width / height and has parents in it
+      each parent has className parent and children in it
+      each child has className child
+
+      =========G===========
+      ---------G-----------
+      |-----|  |   P  |   |
+      |  P  |----------   |
+      |     |   P  c c|---|
+      ---------------------
+    */
     return (
       <g>
-        <g className="grandparent" onClick={this.handleGrandparentClick}>
+        <g className="_***_grandparent_***_" onClick={this.handleGrandparentClick}>
           <rect
-            y={-this.props.grandparentHeight}
+            style={this.props.styles.grandparentRect}
+            y={0/*-this.props.grandparentHeight*/}
             width={width}
-            height={height}/>
+            height={this.props.grandparentHeight}/>
           <text
-            y={6-this.props.grandparentHeight}
+            style={this.props.styles.getGrandparentText}
+            y={2/*6-this.props.grandparentHeight*/}
             x={6}
             dy={".75em"}
             >
-            {"TODO"/*getGrandparentText(d.parent)*/}
+            {"Navigation goes here"/*this.getGrandparentText(d.parent)*/}
           </text>
         </g>
-        {cells}
+        <g
+          className="_***_parentsContainer_***_"
+          transform={
+            "translate(" + 
+            this.props.styles.svg.margin.left + 
+            "," + 
+            this.props.grandparentHeight + 
+            ")"
+          }
+          >
+        {
+          this.props.drawZoomableParentCells(
+            data,
+            this.props.drawZoomableChildrenCells,
+            x,
+            y,
+            formatNumber,
+            this.props.styles
+          )
+        }
+        </g>
       </g>
     )
-
   }
-  /* goin up a level or n... */
+  /* goin' up a level or n... */
   handleGrandparentClick () {
     console.log("Hey! You clicked on the grandparent!")
   }
@@ -168,23 +189,25 @@ class VictoryTreemap extends React.Component {
         : d.value;
   }
   render() {
-    let margin = this.props.margin;
+    let margin = this.props.styles.svg.margin;
 
     return (
       <svg
         height={this.props.height + margin.bottom + margin.top}
         width={this.props.width + margin.left + margin.right}
-        style={{
-          marginLeft: -margin.left + "px",
-          marginRight: -margin.right + "px",
-        }}
+        style={this.props.styles.svg}
         >
-      <g
-        transform={"translate(" + margin.left + "," + margin.top + ")"}
-        style={{shapeRendering: "crispEdges"}}
-        >
-        {this.props.zoomable ? this.drawZoomable() : this.drawStatic()}
-      </g>
+        <rect
+          height={"100%"}
+          width={"100%"}
+          fill={this.props.backgroundColor}
+          ></rect>
+        <g
+          transform={"translate(" + margin.left + "," + margin.top + ")"}
+          style={{shapeRendering: "crispEdges"}}
+          >
+          {this.props.zoomable ? this.drawZoomable() : this.drawStatic()}
+        </g>
       </svg>
     );
   }
@@ -203,17 +226,44 @@ VictoryTreemap.propTypes = {
 
 VictoryTreemap.defaultProps = {
   colorScale: d3.scale.category20c(),
-  /* this should be φ (1.618 : 1) */
+  /* bostock suggests this should be φ (1.618 : 1) */
   width: 1294.4,
   height: 800,
   sticky: true,
   zoomable: true,
-  margin: {
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0
+  styles: {
+    svg: {
+      margin: {
+        top: 0,
+        right: 0,
+        bottom: 0,
+        left: 0
+      }
+    },
+    grandparentText: {
+      fontWeight: "bold"
+    },
+    rect: {
+      fill: "none",
+      stroke: "white"
+    },
+    grandparentRect: {
+      fill: "orange",
+      stroke: "white",
+      strokeWidth: "2px"
+    },
+    childrenRect: {
+      fill: "rgb(230,230,230)",
+      strokeWidth: "1px",
+      fillOpacity: .5
+    },
+    parentRect: {
+      fill: "rgb(230,230,230)",
+      strokeWidth: "2px",
+      fillOpacity: .5
+    }
   },
+  backgroundColor: "rgb(230,230,230)",
   grandparentHeight: 20,
   cellSVG: (cell, index, clickHandler, colorScale) => {
     return (
@@ -243,6 +293,51 @@ VictoryTreemap.defaultProps = {
         </text>
       </g>
     )
+  },
+  /* this is a nested for loop and puts children in each parent */
+  drawZoomableChildrenCells: (parent, x, y, styles) => {
+    let children = parent._children.map((child) => {
+      return (
+        <rect
+          style={styles.childrenRect}
+          className="child"
+          x={ x(child.x) }
+          y={ y(child.y) }
+          width={ x(child.x + child.x) - x(child.x) }
+          height={ y(child.y + child.dy) - y(child.y) }
+        >
+        </rect>
+      )
+    });
+    return children;
+  },
+  /* this is probably its own component, passed in as a child comp. to treemap */
+  /* this is the first for loop that appends the first level past the root node */
+  drawZoomableParentCells: (data, drawZoomableChildrenCells, x, y, formatNumber, styles) => {
+    let parents = data._children.map((parent) => {
+      return (
+        <g>
+          <rect
+            className="parent"
+            style={styles.parentRect}
+            x={ x(parent.x) }
+            y={ y(parent.y) }
+            width={ x(parent.x + parent.x) - x(parent.x) }
+            height={ y(parent.y + parent.dy) - y(parent.y) }
+            >
+          </rect>
+          <text
+            x={ x(parent.x) + 6 }
+            y={ y(parent.y) + 6 }
+            dy={".75em"}
+            >
+            {parent.name + " " + formatNumber(parent.value)}
+          </text>
+          {drawZoomableChildrenCells(parent, x, y, styles)}
+        </g>
+      )
+    });
+    return parents;
   }
 }
 
@@ -251,41 +346,6 @@ export default VictoryTreemap;
 
     /* zoomable cells */
 
-    // var g1 = svg.insert("g", ".grandparent")
-    //     .datum(d)
-    //     .attr("class", "depth");
-
-    // var g = g1.selectAll("g")
-    //     .data(d._children)
-    //   .enter().append("g");
-
-    // g.filter(function(d) { return d._children; })
-    //     .classed("children", true)
-    //     .on("click", transition);
-
-    // g.selectAll(".child")
-    //     .data(function(d) { return d._children || [d]; })
-    //   .enter().append("rect")
-    //     .attr("class", "child")
-    //     .attr("x", function(d) { return x(d.x); })
-    //     .attr("y", function(d) { return y(d.y); })
-    //     .attr("width", function(d) { return x(d.x + d.dx) - x(d.x); })
-    //     .attr("height", function(d) { return y(d.y + d.dy) - y(d.y); });
-
-    // g.append("rect")
-    //     .attr("class", "parent")
-    //     .attr("x", function(d) { return x(d.x); })
-    //     .attr("y", function(d) { return y(d.y); })
-    //     .attr("width", function(d) { return x(d.x + d.dx) - x(d.x); })
-    //     .attr("height", function(d) { return y(d.y + d.dy) - y(d.y); });
-    //   .append("title")
-    //     .text(function(d) { return formatNumber(d.value); });
-
-    // g.append("text")
-    //     .attr("dy", ".75em")
-    //     .text(function(d) { return d.name; })
-    //     .attr("x", function(d) { return x(d.x) + 6; })
-    //     .attr("y", function(d) { return y(d.y) + 6; });
 
     /* ========== TRANSITION ========== */
 
@@ -338,4 +398,11 @@ export default VictoryTreemap;
     //     transitioning = false;
     //   });
     // }
+
+
+
+
+
+
+
 
