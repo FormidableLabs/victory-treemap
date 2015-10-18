@@ -16,10 +16,10 @@ Run `npm run check` before committing.
 Please do not commit changes to files in `dist`.
 These files are only committed when we tag releases.
 
-## Generator Compatibility 
+## Generator Compatibility
 
-All boilerplate components should be named `victory-treemap` or 
+All boilerplate components should be named `victory-treemap` or
 `VictoryTreemap` as appropriate.
 
-`src/components/victory-treemap.jsx` and 
+`src/components/victory-treemap.jsx` and
 `test/client/spec/components/victory-treemap.spec.jsx` SHOULD NOT be moved or renamed

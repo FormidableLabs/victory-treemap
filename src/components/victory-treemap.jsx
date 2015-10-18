@@ -1,7 +1,7 @@
 import React from "react";
 import Radium from "radium";
 import d3 from "d3";
-import _ from "lodash";
+// import _ from "lodash";
 
 /* when they are modularized */
 // import colorScale from "d3-color-scale";
@@ -15,13 +15,15 @@ class VictoryTreemap extends React.Component {
   /* ========== STATIC CELLS ========== */
   drawStaticCells(cells) {
     const cellComponents = cells.map((cell, index) => {
+      const config = {
+        cell,
+        index,
+        handleClick: this.handleCellClick.bind(this, cell),
+        colorScale: this.props.colorScale,
+        hideLabelForValuesLessThan: this.props.hideLabelForValuesLessThan
+      };
       return (
-        this.props.cellSVG(
-          cell,
-          index,
-          this.handleCellClick.bind(this, cell),
-          this.props.colorScale
-        )
+        this.props.cellSVG(config)
       );
     });
     return cellComponents;
@@ -43,183 +45,30 @@ class VictoryTreemap extends React.Component {
     const cells = treemap.nodes(this.props.data);
     return this.drawStaticCells(cells);
   }
-  /*
-    this gives you a breadcrumb on the grandparent (nice!)
-    each part could be a link
-  */
-  // getGrandparentText(d) {
-  //   return d.parent ? getName(d.parent) + " > " + d.name : d.name;
-  // }
-  /* ========== ZOOMABLE MAIN ========== */
-  drawZoomable() {
 
-    const width = this.props.width;
-    const height = this.props.height - this.props.grandparentHeight;
-    const formatNumber = d3.format(",d");
-    // let transitioning = false;
-
-    const x = d3.scale.linear()
-        .domain([0, width])
-        .range([0, width]);
-
-    const y = d3.scale.linear()
-        .domain([0, height])
-        .range([0, height]);
-
-
-    /* ========== SET UP THE TREEMAP FUNCTION ========== */
-    const treemap = d3.layout.treemap()
-        .children((d, depth) => { return depth ? null : d._children; })
-        .sort((a, b) => { return a.value - b.value; })
-        .ratio(height / width * 0.5 * (1 + Math.sqrt(5)))
-        .round(false);
-
-    // Children will get stretched...
-    // Compute the treemap layout recursively such that each group of siblings
-    // uses the same size (1×1) rather than the dimensions of the parent cell.
-    // This optimizes the layout for the current zoom state. Note that a wrapper
-    // object is created for the parent node for each group of siblings so that
-    // the parent’s dimensions are not discarded as we recurse. Since each group
-    // of sibling was laid out in 1×1, we must rescale to fit using absolute
-    // coordinates. This lets us use a viewport to zoom.
-
-    /* FUNCTION EXPRESSION DOES NOT PASS CHECK - REFACTOR */
-    function computeTreemapAndAdjustPerspective(parent) {
-      if (parent._children) {
-        treemap.nodes({_children: parent._children});
-        parent._children.forEach((child) => {
-          child.x = parent.x + child.x * parent.dx;
-          child.y = parent.y + child.y * parent.dy;
-          child.dx *= parent.dx;
-          child.dy *= parent.dy;
-          child.parent = parent;
-          computeTreemapAndAdjustPerspective(child);
-        });
-      }
-    }
-
-    /* make a copy of data so that we're not mutating props */
-    const data = _.cloneDeep(this.props.data);
-    this.addSpecialPropertiesToZoomableTree(data);
-    this.aggregateChildrenAndAddValueToParents(data);
-    computeTreemapAndAdjustPerspective(data, treemap);
-
-    /*
-      todo how is _children being used -
-      where do we need to reference that...
-      when computeTreemapAndAdjustPerspective or drawCells or both
-
-      also... how does datum(d.parent) work
-      that call out to the name() function above
-    */
-    /*
-      grandparent bar is across the top -
-      TODO check if this aligned with orig ex.
-      grandparent container is full width / height
-      and has parents in it
-      each parent has className parent and children in it
-      each child has className child
-
-      =========G===========
-      ---------G-----------
-      |-----|  |   P  |   |
-      |  P  |----------   |
-      |     |   P  c c|---|
-      ---------------------
-    */
-    return (
-      <g>
-        <g className="_***_grandparent_***_" onClick={this.handleGrandparentClick}>
-          <rect
-            style={this.props.styles.grandparentRect}
-            y={0/*-this.props.grandparentHeight*/}
-            width={width}
-            height={this.props.grandparentHeight}/>
-          <text
-            style={this.props.styles.getGrandparentText}
-            y={2/*6-this.props.grandparentHeight*/}
-            x={6}
-            dy={".75em"}
-            >
-            {"Navigation goes here"/*this.getGrandparentText(d.parent)*/}
-          </text>
-        </g>
-        <g
-          className="_***_parentsContainer_***_"
-          transform={
-            "translate(" +
-            this.props.styles.svg.margin.left +
-            "," +
-            this.props.grandparentHeight +
-            ")"
-          }
-          >
-        {
-
-          this.props.drawZoomableParentCells(
-            data,
-            this.props.drawZoomableChildrenCells,
-            x,
-            y,
-            formatNumber,
-            this.props.styles
-          )
-        }
-        </g>
-      </g>
-    );
-  }
-  /* goin' up a level or n... */
-  handleGrandparentClick(d) {
-    return d;
-  }
-  /* ========== INITIALIZE ========== */
-  // This adds x, y, dx, dy and depth properties
-  addSpecialPropertiesToZoomableTree(root) {
-    root.x = root.y = 0;
-    root.dx = this.props.width;
-    root.dy = this.props.height;
-    root.depth = 0;
-  }
-  /* ========== AGGREGATE ========== */
-  /*
-
-    Basically, figure out how deep / large each
-    node is to figure out proportions for treemap.
-
-    Aggregate the values of all internal
-    nodes on tree and add # as property.
-
-    This is normally done by the treemap layout,
-    but not here because of our custom implementation for zooming.
-
-    We also take a snapshot of the original children (_children) to avoid
-    the children being overwritten when when layout is computed.
-
-  */
-  aggregateChildrenAndAddValueToParents(d) {
-    return (d._children = d.children)
-        ? d.value = d.children.reduce((p, v) => {
-          return p + this.aggregateChildrenAndAddValueToParents(v);
-        }, 0)
-        : d.value;
-  }
   render() {
-    const margin = this.props.styles.svg.margin;
+    const m = this.props.styles.margin;
 
     return (
       <svg
-        height={this.props.height + margin.bottom + margin.top + this.props.grandparentHeight}
-        width={this.props.width + margin.left + margin.right}
+        height={
+          this.props.height +
+          m.bottom +
+          m.top
+        }
+        width={
+          this.props.width +
+          m.left +
+          m.right
+        }
         style={this.props.styles.svg}
         >
         <rect
           height="100%"
           width="100%"
-          fill={this.props.backgroundColor}
           ></rect>
         <g
-          transform={"translate(" + margin.left + "," + margin.top + ")"}
+          transform={"translate(" + m.left + "," + m.top + ")"}
           style={{shapeRendering: "crispEdges"}}
           >
           {this.props.zoomable ? this.drawZoomable() : this.drawStatic()}
@@ -230,64 +79,74 @@ class VictoryTreemap extends React.Component {
 }
 
 VictoryTreemap.propTypes = {
+  /**
+   * Tree. For format, see: https://gist.githubusercontent.com/mbostock/1093025/raw/05621a578a66fba4d2cbf5a77e2d1bb3a27ac3d4/flare.json
+   */
   data: React.PropTypes.object,
+  /**
+   * Function for choosing colors
+   * @examples d3.scale.category10()
+   */
   colorScale: React.PropTypes.func,
+  /**
+   * Width of SVG
+   * @examples 900
+   */
   width: React.PropTypes.number,
+  /**
+   * Height of SVG
+   * @examples 600
+   */
   height: React.PropTypes.number,
+  /**
+   * Sticky
+   * See: https://github.com/mbostock/d3/wiki/Treemap-Layout#sticky
+   */
   sticky: React.PropTypes.bool,
-  zoomable: React.PropTypes.bool,
+  /**
+   * Some boxes will be too small for labels to be visible. Use this prop to hide the label.
+   * @examples 100, 1000, 3453
+   */
+  hideLabelForValuesLessThan: React.PropTypes.number,
+  /**
+   * Styles
+   * @examples "#ff0000", "rgba(255, 0, 0, 1", "red"
+   */
   styles: React.PropTypes.object,
-  drawZoomableChildrenCells: React.PropTypes.func,
-  drawZoomableParentCells: React.PropTypes.func,
-  backgroundColor: React.PropTypes.string,
-  grandparentHeight: React.PropTypes.number,
+  /**
+   * Cell SVG, a function that takes an item and returns SVG
+   */
   cellSVG: React.PropTypes.func
 };
 
 VictoryTreemap.defaultProps = {
   colorScale: d3.scale.category20c(),
   /* bostock suggests this should be φ (1.618 : 1) */
+  sticky: true,
   width: 1294.4,
   height: 800,
-  sticky: true,
-  zoomable: false,
+  hideLabelForValuesLessThan: 4000,
   styles: {
-    svg: {
-      margin: {
-        top: 0,
-        right: 0,
-        bottom: 0,
-        left: 0
-      }
-    },
-    grandparentText: {
-      fontWeight: "bold"
+    margin: {
+      top: 0,
+      right: 0,
+      bottom: 0,
+      left: 0
     },
     rect: {
       fill: "none",
       stroke: "white"
-    },
-    grandparentRect: {
-      fill: "orange",
-      stroke: "white",
-      strokeWidth: "2px"
-    },
-    childrenRect: {
-      fill: "rgb(230,230,230)",
-      strokeWidth: "1px",
-      stroke: "white",
-      fillOpacity: .5
-    },
-    parentRect: {
-      fill: "none",
-      stroke: "white",
-      strokeWidth: "2px",
-      fillOpacity: .5
     }
   },
-  backgroundColor: "rgb(230,230,230)",
-  grandparentHeight: 20,
-  cellSVG: (cell, index, clickHandler, colorScale) => {
+  // config: cell, index, clickHandler, colorScale, hideValuesLessThan
+  cellSVG: (config) => {
+    const {
+      cell,
+      index,
+      clickHandler,
+      colorScale,
+      hideLabelForValuesLessThan
+    } = config;
     return (
       <g
         transform={"translate(" + cell.x + "," + cell.y + ")"}
@@ -308,60 +167,16 @@ VictoryTreemap.defaultProps = {
             style={{
               "fontFamily": "Helvetica",
               "fontSize": "10px",
-              "border": "1px solid white"
+              "border": "1px solid white",
+              "fontWeight": cell.children ? "700" : "300"
             }}
             textAnchor={cell.hasChildren ? "end" : "start"}>
-          {cell.name}
+          {cell.value > hideLabelForValuesLessThan ? cell.name : ""}
         </text>
       </g>
     );
-  },
-  /* this is a nested for loop and puts children in each parent */
-  drawZoomableChildrenCells: (parent, x, y, styles) => {
-    const children = parent._children.map((child) => {
-      return (
-        <rect
-          style={styles.childrenRect}
-          className="child"
-          x={ x(child.x) }
-          y={ y(child.y) }
-          width={ x(child.x + child.x) - x(child.x) }
-          height={ y(child.y + child.dy) - y(child.y) }
-        >
-        </rect>
-      );
-    });
-    return children;
-  },
-  /* this is probably its own component, passed in as a child comp. to treemap */
-  /* this is the first for loop that appends the first level past the root node */
-  drawZoomableParentCells: (data, drawZoomableChildrenCells, x, y, formatNumber, styles) => {
-    const parents = data._children.map((parent) => {
-
-      return (
-        <g>
-          <rect
-            className="parent"
-            style={styles.parentRect}
-            x={ x(parent.x) }
-            y={ y(parent.y) }
-            width={ x(parent.x + parent.x) - x(parent.x) }
-            height={ y(parent.y + parent.dy) - y(parent.y) }
-            >
-          </rect>
-          <text
-            x={ x(parent.x) + 6 }
-            y={ y(parent.y) + 6 }
-            dy={".75em"}
-            >
-            {parent.name + " " + formatNumber(parent.value)}
-          </text>
-          {drawZoomableChildrenCells(parent, x, y, styles)}
-        </g>
-      );
-    });
-    return parents;
   }
 };
+
 
 export default VictoryTreemap;
