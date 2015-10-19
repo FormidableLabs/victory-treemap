@@ -38,18 +38,6 @@ class App extends React.Component {
         width={1294.4}
         height={800}
         hideLabelForValuesLessThan={4000}
-        styles={{
-          margin: {
-            top: 0,
-            right: 0,
-            bottom: 0,
-            left: 0
-          },
-          rect: {
-            fill: "none",
-            stroke: "white"
-          }
-        }}
         />
     )
   }
